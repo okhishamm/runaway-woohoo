@@ -1,0 +1,291 @@
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local player = Players.LocalPlayer
+
+--========================================================
+-- CONFIG
+--========================================================
+
+local RANGE = 250
+local DAMAGE = 1000
+local DAMAGE_INTERVAL = 0.2
+
+local START_POSITION = Vector3.new(
+	701.421,
+	2011.231,
+	83592.812
+)
+
+local E_PRESSES = 10
+local E_DELAY = 0.15
+
+local MOVE_DOWN = 30
+local MOVE_FORWARD = 50
+
+local STAY_TELEPORT_INTERVAL = 0.5
+local STAY_DURATION = 120 -- 2 minutes
+
+--========================================================
+-- CHARACTER
+--========================================================
+
+local function getCharacter()
+	local character = player.Character or player.CharacterAdded:Wait()
+	local root = character:WaitForChild("HumanoidRootPart")
+	return character, root
+end
+
+--========================================================
+-- KILL AURA
+--========================================================
+
+task.spawn(function()
+	while true do
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+
+		if root then
+			local npcFolder = workspace:FindFirstChild("NPCs")
+
+			if npcFolder then
+				for _, npc in ipairs(npcFolder:GetChildren()) do
+					if npc:IsA("Model") then
+						local humanoid = npc:FindFirstChildOfClass("Humanoid")
+						local npcRoot =
+							npc:FindFirstChild("HumanoidRootPart")
+							or npc.PrimaryPart
+
+						if humanoid
+							and npcRoot
+							and humanoid.Health > 0 then
+
+							local distance =
+								(npcRoot.Position - root.Position).Magnitude
+
+							if distance <= RANGE then
+								humanoid:TakeDamage(DAMAGE)
+							end
+						end
+					end
+				end
+			end
+		end
+
+		task.wait(DAMAGE_INTERVAL)
+	end
+end)
+
+print("Kill aura started")
+
+--========================================================
+-- GET CHARACTER
+--========================================================
+
+local character, root = getCharacter()
+
+--========================================================
+-- STEP 1: TELEPORT TO START POSITION
+--========================================================
+
+character:PivotTo(CFrame.new(START_POSITION))
+
+root.AssemblyLinearVelocity = Vector3.zero
+root.AssemblyAngularVelocity = Vector3.zero
+
+print("Step 1: Teleported to starting coordinates")
+
+--========================================================
+-- STEP 2: WAIT FOR ACTIVATE PROMPT
+--========================================================
+
+local prompt
+
+repeat
+	prompt =
+		workspace:FindFirstChild("Map")
+		and workspace.Map:FindFirstChild("Buildings")
+		and workspace.Map.Buildings:FindFirstChild("CustomsFinal")
+		and workspace.Map.Buildings.CustomsFinal:FindFirstChild("CustomsBuilding")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding:FindFirstChild("FinalDoor")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor:FindFirstChild("Command")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor.Command:FindFirstChild("CommandButton")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor.Command.CommandButton:FindFirstChild("Prompt")
+		and workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor.Command.CommandButton.Prompt:FindFirstChild("ProximityPrompt")
+
+	if not prompt then
+		task.wait(0.1)
+	end
+until prompt
+
+print("Step 2: Activate prompt loaded")
+
+--========================================================
+-- STEP 3: GET ACTUAL PROMPT POSITION
+--========================================================
+
+local targetPosition
+
+if prompt.Parent:IsA("BasePart") then
+	targetPosition = prompt.Parent.Position
+
+elseif prompt.Parent:IsA("Attachment") then
+	targetPosition = prompt.Parent.WorldPosition
+
+elseif prompt.Parent:IsA("Model") then
+	targetPosition = prompt.Parent:GetPivot().Position
+
+else
+	targetPosition = prompt.Parent.Position
+end
+
+print("Activate prompt position:", targetPosition)
+
+--========================================================
+-- STEP 4: TELEPORT DIRECTLY TO PROMPT
+-- AND FACE THE PROMPT
+--========================================================
+
+character, root = getCharacter()
+
+local directionToPrompt =
+	(targetPosition - root.Position)
+
+if directionToPrompt.Magnitude > 0 then
+	directionToPrompt = directionToPrompt.Unit
+else
+	directionToPrompt = Vector3.new(0, 0, -1)
+end
+
+local promptCFrame = CFrame.lookAt(
+	targetPosition,
+	targetPosition + directionToPrompt
+)
+
+character:PivotTo(promptCFrame)
+
+root.AssemblyLinearVelocity = Vector3.zero
+root.AssemblyAngularVelocity = Vector3.zero
+
+print("Step 3: Teleported directly to Activate prompt")
+
+--========================================================
+-- STEP 5: PRESS E 10 TIMES
+--========================================================
+
+local function pressKey(keyCode)
+	VirtualInputManager:SendKeyEvent(
+		true,
+		keyCode,
+		false,
+		game
+	)
+
+	task.wait(0.05)
+
+	VirtualInputManager:SendKeyEvent(
+		false,
+		keyCode,
+		false,
+		game
+	)
+end
+
+for i = 1, E_PRESSES do
+	pressKey(Enum.KeyCode.E)
+
+	print("Pressed E:", i)
+
+	-- After the first 5 E presses,
+	-- press ` once.
+	if i == 5 then
+		task.wait(E_DELAY)
+
+		pressKey(Enum.KeyCode.Backquote)
+
+		print("Pressed `")
+	end
+
+	task.wait(E_DELAY)
+end
+
+print("Finished pressing E")
+
+--========================================================
+-- STEP 6: CALCULATE THE NEXT POSITION ONCE
+--========================================================
+
+character, root = getCharacter()
+
+local currentPosition = root.Position
+
+local forward = root.CFrame.LookVector
+
+-- Only use horizontal forward direction
+forward = Vector3.new(
+	forward.X,
+	0,
+	forward.Z
+)
+
+if forward.Magnitude > 0 then
+	forward = forward.Unit
+else
+	forward = Vector3.new(0, 0, -1)
+end
+
+-- IMPORTANT:
+-- This calculation happens ONLY ONCE.
+local stayPosition =
+	currentPosition
+	+ Vector3.new(0, -MOVE_DOWN, 0)
+	+ (forward * MOVE_FORWARD)
+
+local stayCFrame =
+	CFrame.new(stayPosition) * root.CFrame.Rotation
+
+print("Next position:", stayPosition)
+
+--========================================================
+-- STEP 7: TELEPORT THERE ONCE
+--========================================================
+
+character:PivotTo(stayCFrame)
+
+root.AssemblyLinearVelocity = Vector3.zero
+root.AssemblyAngularVelocity = Vector3.zero
+
+print("Step 4: Teleported down 30 + forward 50")
+
+--========================================================
+-- STEP 8: KEEP TELEPORTING TO THE SAME POSITION
+-- EVERY 0.5 SECONDS FOR 2 MINUTES
+--========================================================
+
+local startTime = os.clock()
+local teleportCount = 0
+
+while os.clock() - startTime < STAY_DURATION do
+	character, root = getCharacter()
+
+	-- SAME EXACT CFrame EVERY TIME.
+	-- It does NOT move another 30 down / 50 forward.
+	character:PivotTo(stayCFrame)
+
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+
+	teleportCount += 1
+
+	print(
+		"Stay teleport:",
+		teleportCount,
+		"| Position:",
+		stayPosition
+	)
+
+	task.wait(STAY_TELEPORT_INTERVAL)
+end
+
+print("Finished 2-minute teleport loop")
+print("Total stay teleports:", teleportCount)
